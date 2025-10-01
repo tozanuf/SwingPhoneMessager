@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>振ったら光る</title>
+<style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background-color: black;
+    color: white;
+    font-size: 2rem;
+    transition: background-color 0.3s;
+  }
+  .lit {
+    background-color: yellow;
+    color: black;
+  }
+</style>
+</head>
+<body>
+振ってみてください！
+<script>
+let lastAcc = {x: 0, y: 0, z: 0};
+let threshold = 15; // 振ったと判定する加速度の閾値
+let isLit = false;
+
+// iOSではユーザー許可が必要
+if (typeof DeviceMotionEvent !== 'undefined' &&
+    typeof DeviceMotionEvent.requestPermission === 'function') {
+    DeviceMotionEvent.requestPermission()
+        .then(response => {
+            if (response === 'granted') {
+                window.addEventListener('devicemotion', handleMotion);
+            } else {
+                alert('加速度センサーの許可が必要です');
+            }
+        })
+        .catch(console.error);
+} else {
+    // iOS以外
+    window.addEventListener('devicemotion', handleMotion);
+}
+
+function handleMotion(event) {
+    const acc = event.accelerationIncludingGravity;
+
+    // 単純な振動判定
+    const diffX = Math.abs(acc.x - lastAcc.x);
+    const diffY = Math.abs(acc.y - lastAcc.y);
+    const diffZ = Math.abs(acc.z - lastAcc.z);
+
+    const maxDiff = Math.max(diffX, diffY, diffZ);
+
+    if (maxDiff > threshold) {
+        if (!isLit) {
+            document.body.classList.add('lit');
+            isLit = true;
+        }
+    } else {
+        if (isLit) {
+            document.body.classList.remove('lit');
+            isLit = false;
+        }
+    }
+
+    lastAcc = {x: acc.x, y: acc.y, z: acc.z};
+}
+</script>
+</body>
+</html>
