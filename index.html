@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>振ったら光る</title>
+<title>振ったら光る＋加速度表示</title>
 <style>
   html, body {
     margin: 0;
@@ -11,27 +11,48 @@
     height: 100%;
     width: 100%;
     display: flex;
+    flex-direction: column;
     justify-content: center;
     align-items: center;
     background-color: black;
     color: white;
-    font-size: 2rem;
+    font-size: 1.5rem;
     transition: background-color 0.3s;
   }
   .lit {
     background-color: yellow;
     color: black;
   }
+  .acc-values {
+    margin-top: 20px;
+    font-family: monospace;
+  }
 </style>
 </head>
 <body>
 振ってみてください！
+<div class="acc-values">
+  X: <span id="accX">0</span><br>
+  Y: <span id="accY">0</span><br>
+  Z: <span id="accZ">0</span>
+</div>
+
 <script>
 let lastAcc = {x: 0, y: 0, z: 0};
-let threshold = 15; // 振ったと判定する加速度の閾値
+let threshold = 15;
 let isLit = false;
 
-// iOSではユーザー許可が必要
+const accX = document.getElementById('accX');
+const accY = document.getElementById('accY');
+const accZ = document.getElementById('accZ');
+
+function updateDisplay(acc) {
+    accX.textContent = acc.x.toFixed(2);
+    accY.textContent = acc.y.toFixed(2);
+    accZ.textContent = acc.z.toFixed(2);
+}
+
+// iOS対応
 if (typeof DeviceMotionEvent !== 'undefined' &&
     typeof DeviceMotionEvent.requestPermission === 'function') {
     DeviceMotionEvent.requestPermission()
@@ -44,14 +65,16 @@ if (typeof DeviceMotionEvent !== 'undefined' &&
         })
         .catch(console.error);
 } else {
-    // iOS以外
     window.addEventListener('devicemotion', handleMotion);
 }
 
 function handleMotion(event) {
     const acc = event.accelerationIncludingGravity;
 
-    // 単純な振動判定
+    // 加速度表示更新
+    updateDisplay(acc);
+
+    // 振動判定
     const diffX = Math.abs(acc.x - lastAcc.x);
     const diffY = Math.abs(acc.y - lastAcc.y);
     const diffZ = Math.abs(acc.z - lastAcc.z);
