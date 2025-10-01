@@ -2,192 +2,136 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>空中文字表示</title>
+<title>空中文字ドット表示</title>
 <style>
-  html, body {
-    margin: 0;
-    padding: 0;
-    height: 100%;
-    width: 100%;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    background-color: black;
-    color: white;
-    font-family: sans-serif;
-  }
+  body { background: #000; color: #fff; text-align: center; margin:0; padding:0; }
   #inputScreen, #displayScreen {
-    position: absolute;
-    top: 0; left: 0;
-    width: 100%;
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
+    position: absolute; top:0; left:0; width:100%; height:100%;
+    display:flex; justify-content:center; align-items:center; flex-direction:column;
   }
-  #displayScreen {
-    display: none;
-    flex-direction: row;
-    flex-wrap: wrap;
-  }
-  .dot {
-    width: 20px; height: 20px;
-    margin: 2px;
-    background-color: black;
-    border-radius: 50%;
-    transition: background-color 0.2s;
-  }
-  .dot.on {
-    background-color: yellow;
-  }
+  #displayScreen { display:none; }
+  canvas { background:#000; }
 </style>
 </head>
 <body>
 
 <!-- 入力画面 -->
 <div id="inputScreen">
-  <input type="text" id="textInput" placeholder="英数字を入力" />
-  <button id="runBtn">実行</button>
+  <input type="text" id="textInput" placeholder="文字を入力" value="HELLO WORLD">
+  <button id="runBtn">表示</button>
 </div>
 
 <!-- 表示画面 -->
-<div id="displayScreen"></div>
+<div id="displayScreen">
+  <canvas id="dotCanvas" width="600" height="144"></canvas>
+  <p style="color:white;font-size:0.8em;">画面をタップすると入力画面に戻る</p>
+</div>
+
+<canvas id="textCanvas" width="1000" height="200" style="display:none;"></canvas>
 
 <script>
-// 5x7ドットマトリクス定義（A-Z, 0-9のみサンプル）
-const font5x7 = {
-  "A":[0x1F,0x05,0x05,0x1F,0x00],
-  "B":[0x1F,0x15,0x15,0x0A,0x00],
-  "C":[0x0E,0x11,0x11,0x00,0x00],
-  "D":[0x1F,0x11,0x11,0x0E,0x00],
-  "E":[0x1F,0x15,0x15,0x11,0x00],
-  "F":[0x1F,0x05,0x05,0x01,0x00],
-  "G":[0x0E,0x11,0x15,0x1D,0x00],
-  "H":[0x1F,0x04,0x04,0x1F,0x00],
-  "I":[0x11,0x1F,0x11,0x00,0x00],
-  "J":[0x08,0x10,0x10,0x0F,0x00],
-  "0":[0x0E,0x11,0x11,0x0E,0x00],
-  "1":[0x12,0x1F,0x10,0x00,0x00],
-  "2":[0x1A,0x15,0x15,0x12,0x00],
-  "3":[0x11,0x15,0x15,0x0A,0x00],
-  "4":[0x07,0x04,0x04,0x1F,0x00],
-  "5":[0x17,0x15,0x15,0x09,0x00],
-  "6":[0x0E,0x15,0x15,0x08,0x00],
-  "7":[0x01,0x01,0x1D,0x03,0x00],
-  "8":[0x0A,0x15,0x15,0x0A,0x00],
-  "9":[0x02,0x15,0x15,0x0E,0x00],
-  " ": [0x00,0x00,0x00,0x00,0x00]
-};
-
-// 入力画面要素
 const inputScreen = document.getElementById('inputScreen');
 const displayScreen = document.getElementById('displayScreen');
-const textInput = document.getElementById('textInput');
 const runBtn = document.getElementById('runBtn');
+const dotCanvas = document.getElementById('dotCanvas');
+const dctx = dotCanvas.getContext('2d');
+const textCanvas = document.getElementById('textCanvas');
+const tctx = textCanvas.getContext('2d');
 
-let dots = []; // dot div配列
+let matrix = [];
 let colIndex = 0;
-let direction = 1; // 1:右へ, -1:左へ
-let matrix = []; // 2次元ドット配列（列優先）
+let direction = 1;
 let lastAcc = {x:0, y:0, z:0};
-let threshold = 12;
+const threshold = 12;
+const scale = 6; // ドット1つのサイズ
 
-// 入力文字をドットマトリクスに変換
-function textToMatrix(text){
-  const cols = [];
-  for(const c of text.toUpperCase()){
-    const pattern = font5x7[c] || font5x7[" "];
-    for(let i=0;i<pattern.length;i++){
-      const col = [];
-      for(let row=0;row<7;row++){
-        col.push((pattern[i] >> row) & 1);
-      }
-      cols.push(col);
+function textToDotMatrix(text, height=24, maxWidth=500){
+  tctx.clearRect(0,0,textCanvas.width,textCanvas.height);
+  tctx.fillStyle="black";
+  tctx.fillRect(0,0,textCanvas.width,textCanvas.height);
+  tctx.fillStyle="white";
+  tctx.font="bold 120px sans-serif";
+  tctx.textAlign="left";
+  tctx.textBaseline="top";
+  tctx.fillText(text,20,20);
+
+  const textWidth = tctx.measureText(text).width + 40;
+  const width = Math.min(maxWidth, Math.floor(textWidth*(height/textCanvas.height)));
+
+  const smallCanvas = document.createElement("canvas");
+  smallCanvas.width = width;
+  smallCanvas.height = height;
+  const sctx = smallCanvas.getContext("2d");
+  sctx.drawImage(textCanvas,0,0,width,height);
+
+  const imgData = sctx.getImageData(0,0,width,height);
+  const pixels = imgData.data;
+  const dotMatrix = [];
+  for(let y=0;y<height;y++){
+    const row = [];
+    for(let x=0;x<width;x++){
+      const i = (y*width+x)*4;
+      const r=pixels[i],g=pixels[i+1],b=pixels[i+2];
+      const brightness=(r+g+b)/3;
+      row.push(brightness>128?1:0);
     }
-    cols.push([0,0,0,0,0,0,0]); // 文字間スペース
+    dotMatrix.push(row);
   }
-  return cols;
+  return dotMatrix;
 }
 
-// dot div作成
-function createDots(numRows, numCols){
-  displayScreen.innerHTML = "";
-  dots = [];
-  for(let r=0;r<numRows;r++){
-    for(let c=0;c<numCols;c++){
-      const d = document.createElement('div');
-      d.classList.add('dot');
-      displayScreen.appendChild(d);
-      dots.push(d);
-    }
-  }
-}
-
-// ドット更新
-function updateDots(){
-  for(let r=0;r<7;r++){
-    for(let c=0;c<matrix.length;c++){
-      const idx = r*matrix.length + c;
-      if(dots[idx]){
-        if(c===colIndex){
-          dots[idx].classList.toggle('on', matrix[c][r]===1);
-        } else {
-          dots[idx].classList.remove('on');
-        }
+function drawColumn(index){
+  dctx.clearRect(0,0,dotCanvas.width,dotCanvas.height);
+  const width = matrix[0].length;
+  const height = matrix.length;
+  for(let y=0;y<height;y++){
+    for(let x=0;x<width;x++){
+      if(x===index && matrix[y][x]){
+        dctx.fillStyle="lime";
+        dctx.fillRect(x*scale,y*scale,scale,scale);
       }
     }
   }
-  // 次列へ
   colIndex += direction;
-  if(colIndex >= matrix.length) { direction = -1; colIndex = matrix.length-1;}
-  if(colIndex < 0) { direction = 1; colIndex = 0;}
+  if(colIndex>=matrix[0].length){direction=-1; colIndex=matrix[0].length-1;}
+  if(colIndex<0){direction=1; colIndex=0;}
 }
 
-// 実行ボタン
-runBtn.addEventListener('click', ()=>{
-  const text = textInput.value || "HELLO";
-  matrix = textToMatrix(text);
-  createDots(7, matrix.length);
-  inputScreen.style.display = "none";
-  displayScreen.style.display = "flex";
+runBtn.addEventListener('click',()=>{
+  const text = document.getElementById('textInput').value || "HELLO";
+  matrix = textToDotMatrix(text);
+  colIndex = 0; direction=1;
+  inputScreen.style.display="none";
+  displayScreen.style.display="flex";
+  drawColumn(colIndex);
 });
 
-// 画面タップで戻る
-displayScreen.addEventListener('click', ()=>{
-  displayScreen.style.display = "none";
-  inputScreen.style.display = "flex";
-  colIndex = 0;
-  direction = 1;
+// 画面タップで入力画面に戻る
+displayScreen.addEventListener('click',()=>{
+  displayScreen.style.display="none";
+  inputScreen.style.display="flex";
 });
 
-// 加速度センサーで列送り
+// 加速度で列送り
 function handleMotion(event){
   const acc = event.accelerationIncludingGravity;
   const diffX = Math.abs(acc.x - lastAcc.x);
   const diffY = Math.abs(acc.y - lastAcc.y);
   const diffZ = Math.abs(acc.z - lastAcc.z);
-  const maxDiff = Math.max(diffX, diffY, diffZ);
-  if(maxDiff > threshold){
-    updateDots();
+  const maxDiff = Math.max(diffX,diffY,diffZ);
+  if(maxDiff>threshold && matrix.length>0){
+    drawColumn(colIndex);
   }
-  lastAcc = {x:acc.x, y:acc.y, z:acc.z};
+  lastAcc={x:acc.x,y:acc.y,z:acc.z};
 }
 
 // iOS対応
-if(typeof DeviceMotionEvent !== 'undefined' &&
-   typeof DeviceMotionEvent.requestPermission === 'function'){
-    DeviceMotionEvent.requestPermission()
-      .then(response=>{
-        if(response==='granted'){
-          window.addEventListener('devicemotion', handleMotion);
-        } else {
-          alert('加速度センサーの許可が必要です');
-        }
-      }).catch(console.error);
+if(typeof DeviceMotionEvent!=='undefined' && typeof DeviceMotionEvent.requestPermission==='function'){
+  DeviceMotionEvent.requestPermission()
+    .then(resp=>{if(resp==='granted'){window.addEventListener('devicemotion',handleMotion);}else{alert("加速度センサーの許可が必要です");}})
+    .catch(console.error);
 }else{
-  window.addEventListener('devicemotion', handleMotion);
+  window.addEventListener('devicemotion',handleMotion);
 }
 </script>
 </body>
