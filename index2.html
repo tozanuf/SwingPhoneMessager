@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>ドットマトリクス表示</title>
+  <style>
+    body { background: #222; color: #fff; text-align: center; }
+    canvas { background: #000; margin-top: 10px; }
+  </style>
+</head>
+<body>
+  <h3>ドットマトリクス化テスト</h3>
+  <input type="text" id="inputText" value="HELLO WORLD">
+  <button onclick="drawMatrix()">変換して表示</button>
+  <br>
+  <canvas id="textCanvas" width="1000" height="200" style="display:none;"></canvas>
+  <canvas id="dotCanvas" width="600" height="200"></canvas>
+
+  <script>
+    function textToDotMatrix(text, height=24, maxWidth=500) {
+      const canvas = document.getElementById("textCanvas");
+      const ctx = canvas.getContext("2d");
+
+      // 背景黒でクリア
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = "black";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // テキスト描画
+      ctx.fillStyle = "white";
+      ctx.font = "bold 120px sans-serif";
+      ctx.textAlign = "left";
+      ctx.textBaseline = "top";
+      ctx.fillText(text, 20, 20);
+
+      // テキスト幅を取得
+      const textWidth = ctx.measureText(text).width + 40;
+      const width = Math.min(maxWidth, Math.floor(textWidth * (height / canvas.height)));
+
+      // 縮小用キャンバス
+      const smallCanvas = document.createElement("canvas");
+      smallCanvas.width = width;
+      smallCanvas.height = height;
+      const sctx = smallCanvas.getContext("2d");
+      sctx.drawImage(canvas, 0, 0, width, height);
+
+      // ピクセル取得
+      const imgData = sctx.getImageData(0, 0, width, height);
+      const pixels = imgData.data;
+
+      const dotMatrix = [];
+      for (let y = 0; y < height; y++) {
+        const row = [];
+        for (let x = 0; x < width; x++) {
+          const i = (y * width + x) * 4;
+          const r = pixels[i], g = pixels[i+1], b = pixels[i+2];
+          const brightness = (r+g+b)/3;
+          row.push(brightness > 128 ? 1 : 0);
+        }
+        dotMatrix.push(row);
+      }
+      return dotMatrix;
+    }
+
+    function drawMatrix() {
+      const text = document.getElementById("inputText").value;
+      const matrix = textToDotMatrix(text);
+
+      const dotCanvas = document.getElementById("dotCanvas");
+      const dctx = dotCanvas.getContext("2d");
+
+      // 表示用スケール
+      const scale = 6; // 1ドットを6x6ピクセルで描画
+      dotCanvas.width = matrix[0].length * scale;
+      dotCanvas.height = matrix.length * scale;
+
+      // 背景クリア
+      dctx.fillStyle = "black";
+      dctx.fillRect(0, 0, dotCanvas.width, dotCanvas.height);
+
+      // ドット描画
+      for (let y = 0; y < matrix.length; y++) {
+        for (let x = 0; x < matrix[y].length; x++) {
+          if (matrix[y][x]) {
+            dctx.fillStyle = "lime";
+            dctx.fillRect(x * scale, y * scale, scale, scale);
+          }
+        }
+      }
+    }
+  </script>
+</body>
+</html>
