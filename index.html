@@ -2,15 +2,17 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>空中文字ドット表示</title>
+<title>空中文字表示</title>
 <style>
-  body { background: #000; color: #fff; text-align: center; margin:0; padding:0; }
+  body { margin:0; padding:0; background:#000; color:#fff; display:flex; justify-content:center; align-items:center; height:100vh; }
   #inputScreen, #displayScreen {
-    position: absolute; top:0; left:0; width:100%; height:100%;
+    position:absolute; top:0; left:0; width:100%; height:100%;
     display:flex; justify-content:center; align-items:center; flex-direction:column;
   }
   #displayScreen { display:none; }
   canvas { background:#000; }
+  input { font-size:1.2em; padding:0.5em; }
+  button { font-size:1.2em; padding:0.5em 1em; margin-top:0.5em; }
 </style>
 </head>
 <body>
@@ -27,6 +29,7 @@
   <p style="color:white;font-size:0.8em;">画面をタップすると入力画面に戻る</p>
 </div>
 
+<!-- 非表示のキャンバスで文字列をドット化 -->
 <canvas id="textCanvas" width="1000" height="200" style="display:none;"></canvas>
 
 <script>
@@ -40,11 +43,11 @@ const tctx = textCanvas.getContext('2d');
 
 let matrix = [];
 let colIndex = 0;
-let direction = 1;
-let lastAcc = {x:0, y:0, z:0};
-const threshold = 12;
-const scale = 6; // ドット1つのサイズ
+const scale = 6; // 1ドットのサイズ
+const threshold = 2.0;
+let lastTime = 0;
 
+// 文字列→24×Nドットマトリクス
 function textToDotMatrix(text, height=24, maxWidth=500){
   tctx.clearRect(0,0,textCanvas.width,textCanvas.height);
   tctx.fillStyle="black";
@@ -80,27 +83,45 @@ function textToDotMatrix(text, height=24, maxWidth=500){
   return dotMatrix;
 }
 
+// 1列描画（毎回画面クリア）
 function drawColumn(index){
-  dctx.clearRect(0,0,dotCanvas.width,dotCanvas.height);
-  const width = matrix[0].length;
+  dctx.fillStyle = "black";
+  dctx.fillRect(0,0,dotCanvas.width,dotCanvas.height);
   const height = matrix.length;
   for(let y=0;y<height;y++){
-    for(let x=0;x<width;x++){
-      if(x===index && matrix[y][x]){
-        dctx.fillStyle="lime";
-        dctx.fillRect(x*scale,y*scale,scale,scale);
-      }
+    if(matrix[y][index]){
+      dctx.fillStyle="lime";
+      dctx.fillRect(index*scale, y*scale, scale, scale);
     }
   }
-  colIndex += direction;
-  if(colIndex>=matrix[0].length){direction=-1; colIndex=matrix[0].length-1;}
-  if(colIndex<0){direction=1; colIndex=0;}
 }
 
+// 加速度センサーで列送り（横方向のみ）
+function handleMotion(event){
+  const acc = event.accelerationIncludingGravity;
+  if(!acc) return;
+  const now = Date.now();
+  if(now - lastTime < 50) return; // ノイズ防止
+
+  const ax = acc.x;
+  if(ax > threshold){
+    colIndex++;
+    if(colIndex >= matrix[0].length) colIndex = matrix[0].length-1;
+    drawColumn(colIndex);
+    lastTime = now;
+  } else if(ax < -threshold){
+    colIndex--;
+    if(colIndex < 0) colIndex = 0;
+    drawColumn(colIndex);
+    lastTime = now;
+  }
+}
+
+// ボタンで文字列をドット化して表示開始
 runBtn.addEventListener('click',()=>{
   const text = document.getElementById('textInput').value || "HELLO";
   matrix = textToDotMatrix(text);
-  colIndex = 0; direction=1;
+  colIndex = 0;
   inputScreen.style.display="none";
   displayScreen.style.display="flex";
   drawColumn(colIndex);
@@ -112,34 +133,13 @@ displayScreen.addEventListener('click',()=>{
   inputScreen.style.display="flex";
 });
 
-
-// 横方向の加速度で列送り
-function handleMotion(event){
-  const acc = event.accelerationIncludingGravity;
-  if(!acc) return;
-  const now = Date.now();
-  if(now - lastTime < 100) return; // 連打防止
-  const ax = acc.x;
-
-  if(ax > threshold){
-    colIndex++;
-    if(colIndex >= WIDTH) colIndex = WIDTH - 1;
-    drawColumn(colIndex);
-    lastTime = now;
-  } else if(ax < -threshold){
-    colIndex--;
-    if(colIndex < 0) colIndex = 0;
-    drawColumn(colIndex);
-    lastTime = now;
-  }
-}
-
-
 // iOS対応
 if(typeof DeviceMotionEvent!=='undefined' && typeof DeviceMotionEvent.requestPermission==='function'){
   DeviceMotionEvent.requestPermission()
-    .then(resp=>{if(resp==='granted'){window.addEventListener('devicemotion',handleMotion);}else{alert("加速度センサーの許可が必要です");}})
-    .catch(console.error);
+    .then(resp=>{
+      if(resp==='granted'){window.addEventListener('devicemotion',handleMotion);}
+      else alert("加速度センサーの許可が必要です");
+    }).catch(console.error);
 }else{
   window.addEventListener('devicemotion',handleMotion);
 }
