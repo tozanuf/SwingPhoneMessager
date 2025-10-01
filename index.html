@@ -83,18 +83,19 @@ function textToDotMatrix(text, height=24, maxWidth=500){
   }
   return dotMatrix;
 }
-
-// 1列描画
 function drawColumn(index){
   dctx.fillStyle = "black";
   dctx.fillRect(0,0,dotCanvas.width,dotCanvas.height);
+
   const height = matrix.length;
-  const width = matrix[0].length;
+  const canvasWidth = dotCanvas.width;
+  const centerX = Math.floor(canvasWidth / 2); // 中央
+  const colX = centerX - Math.floor(scale / 2); // 中央に1列配置
 
   for(let y=0;y<height;y++){
     if(matrix[y][index]){
       dctx.fillStyle="lime";
-      dctx.fillRect(index*scale, y*scale, scale, scale);
+      dctx.fillRect(colX, y*scale, scale, scale);
     }
   }
 }
