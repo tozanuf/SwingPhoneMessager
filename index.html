@@ -4,13 +4,16 @@
 <meta charset="UTF-8">
 <title>空中文字表示</title>
 <style>
-  body { margin:0; padding:0; background:#000; color:#fff; display:flex; justify-content:center; align-items:center; height:100vh; }
+  html, body {
+    margin:0; padding:0; background:#000; color:#fff; width:100%; height:100%;
+    display:flex; justify-content:center; align-items:center; overflow:hidden;
+  }
   #inputScreen, #displayScreen {
     position:absolute; top:0; left:0; width:100%; height:100%;
     display:flex; justify-content:center; align-items:center; flex-direction:column;
   }
   #displayScreen { display:none; }
-  canvas { background:#000; }
+  canvas { background:#000; display:block; }
   input { font-size:1.2em; padding:0.5em; }
   button { font-size:1.2em; padding:0.5em 1em; margin-top:0.5em; }
 </style>
@@ -25,11 +28,10 @@
 
 <!-- 表示画面 -->
 <div id="displayScreen">
-  <canvas id="dotCanvas" width="600" height="144"></canvas>
-  <p style="color:white;font-size:0.8em;">画面をタップすると入力画面に戻る</p>
+  <canvas id="dotCanvas"></canvas>
 </div>
 
-<!-- 非表示のキャンバスで文字列をドット化 -->
+<!-- 非表示キャンバスで文字列をドット化 -->
 <canvas id="textCanvas" width="1000" height="200" style="display:none;"></canvas>
 
 <script>
@@ -43,9 +45,8 @@ const tctx = textCanvas.getContext('2d');
 
 let matrix = [];
 let colIndex = 0;
-const scale = 6; // 1ドットのサイズ
-const threshold = 2.0;
-let lastTime = 0;
+let scale = 10; // 後で画面縦サイズに合わせて自動計算
+let intervalId = null;
 
 // 文字列→24×Nドットマトリクス
 function textToDotMatrix(text, height=24, maxWidth=500){
@@ -83,11 +84,13 @@ function textToDotMatrix(text, height=24, maxWidth=500){
   return dotMatrix;
 }
 
-// 1列描画（毎回画面クリア）
+// 1列描画
 function drawColumn(index){
   dctx.fillStyle = "black";
   dctx.fillRect(0,0,dotCanvas.width,dotCanvas.height);
   const height = matrix.length;
+  const width = matrix[0].length;
+
   for(let y=0;y<height;y++){
     if(matrix[y][index]){
       dctx.fillStyle="lime";
@@ -96,53 +99,39 @@ function drawColumn(index){
   }
 }
 
-// 加速度センサーで列送り（横方向のみ）
-function handleMotion(event){
-  const acc = event.accelerationIncludingGravity;
-  if(!acc) return;
-  const now = Date.now();
-  if(now - lastTime < 50) return; // ノイズ防止
-
-  const ax = acc.x;
-  if(ax > threshold){
-    colIndex++;
-    if(colIndex >= matrix[0].length) colIndex = matrix[0].length-1;
-    drawColumn(colIndex);
-    lastTime = now;
-  } else if(ax < -threshold){
-    colIndex--;
-    if(colIndex < 0) colIndex = 0;
-    drawColumn(colIndex);
-    lastTime = now;
-  }
+// 列自動送り
+function autoScroll(){
+  colIndex++;
+  if(colIndex >= matrix[0].length) colIndex = 0;
+  drawColumn(colIndex);
 }
 
-// ボタンで文字列をドット化して表示開始
+// 表示開始
 runBtn.addEventListener('click',()=>{
   const text = document.getElementById('textInput').value || "HELLO";
   matrix = textToDotMatrix(text);
+
+  // 画面縦いっぱいにスケール自動計算
+  scale = Math.floor(dotCanvas.clientHeight / matrix.length);
+  dotCanvas.width = matrix[0].length * scale;
+  dotCanvas.height = matrix.length * scale;
+
   colIndex = 0;
   inputScreen.style.display="none";
   displayScreen.style.display="flex";
+
   drawColumn(colIndex);
+
+  if(intervalId) clearInterval(intervalId);
+  intervalId = setInterval(autoScroll, 100); // 100msごとに列送り
 });
 
 // 画面タップで入力画面に戻る
 displayScreen.addEventListener('click',()=>{
   displayScreen.style.display="none";
   inputScreen.style.display="flex";
+  if(intervalId) clearInterval(intervalId);
 });
-
-// iOS対応
-if(typeof DeviceMotionEvent!=='undefined' && typeof DeviceMotionEvent.requestPermission==='function'){
-  DeviceMotionEvent.requestPermission()
-    .then(resp=>{
-      if(resp==='granted'){window.addEventListener('devicemotion',handleMotion);}
-      else alert("加速度センサーの許可が必要です");
-    }).catch(console.error);
-}else{
-  window.addEventListener('devicemotion',handleMotion);
-}
 </script>
 </body>
 </html>
