@@ -112,18 +112,28 @@ displayScreen.addEventListener('click',()=>{
   inputScreen.style.display="flex";
 });
 
-// 加速度で列送り
+
+// 横方向の加速度で列送り
 function handleMotion(event){
   const acc = event.accelerationIncludingGravity;
-  const diffX = Math.abs(acc.x - lastAcc.x);
-  const diffY = Math.abs(acc.y - lastAcc.y);
-  const diffZ = Math.abs(acc.z - lastAcc.z);
-  const maxDiff = Math.max(diffX,diffY,diffZ);
-  if(maxDiff>threshold && matrix.length>0){
+  if(!acc) return;
+  const now = Date.now();
+  if(now - lastTime < 100) return; // 連打防止
+  const ax = acc.x;
+
+  if(ax > threshold){
+    colIndex++;
+    if(colIndex >= WIDTH) colIndex = WIDTH - 1;
     drawColumn(colIndex);
+    lastTime = now;
+  } else if(ax < -threshold){
+    colIndex--;
+    if(colIndex < 0) colIndex = 0;
+    drawColumn(colIndex);
+    lastTime = now;
   }
-  lastAcc={x:acc.x,y:acc.y,z:acc.z};
 }
+
 
 // iOS対応
 if(typeof DeviceMotionEvent!=='undefined' && typeof DeviceMotionEvent.requestPermission==='function'){
