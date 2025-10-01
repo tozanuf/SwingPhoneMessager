@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>振ったら光る＋加速度表示</title>
+<title>空中文字表示</title>
 <style>
   html, body {
     margin: 0;
@@ -11,89 +11,183 @@
     height: 100%;
     width: 100%;
     display: flex;
-    flex-direction: column;
     justify-content: center;
     align-items: center;
     background-color: black;
     color: white;
-    font-size: 1.5rem;
-    transition: background-color 0.3s;
+    font-family: sans-serif;
   }
-  .lit {
+  #inputScreen, #displayScreen {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+  }
+  #displayScreen {
+    display: none;
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+  .dot {
+    width: 20px; height: 20px;
+    margin: 2px;
+    background-color: black;
+    border-radius: 50%;
+    transition: background-color 0.2s;
+  }
+  .dot.on {
     background-color: yellow;
-    color: black;
-  }
-  .acc-values {
-    margin-top: 20px;
-    font-family: monospace;
   }
 </style>
 </head>
 <body>
-振ってみてください！
-<div class="acc-values">
-  X: <span id="accX">0</span><br>
-  Y: <span id="accY">0</span><br>
-  Z: <span id="accZ">0</span>
+
+<!-- 入力画面 -->
+<div id="inputScreen">
+  <input type="text" id="textInput" placeholder="英数字を入力" />
+  <button id="runBtn">実行</button>
 </div>
 
+<!-- 表示画面 -->
+<div id="displayScreen"></div>
+
 <script>
-let lastAcc = {x: 0, y: 0, z: 0};
-let threshold = 15;
-let isLit = false;
+// 5x7ドットマトリクス定義（A-Z, 0-9のみサンプル）
+const font5x7 = {
+  "A":[0x1F,0x05,0x05,0x1F,0x00],
+  "B":[0x1F,0x15,0x15,0x0A,0x00],
+  "C":[0x0E,0x11,0x11,0x00,0x00],
+  "D":[0x1F,0x11,0x11,0x0E,0x00],
+  "E":[0x1F,0x15,0x15,0x11,0x00],
+  "F":[0x1F,0x05,0x05,0x01,0x00],
+  "G":[0x0E,0x11,0x15,0x1D,0x00],
+  "H":[0x1F,0x04,0x04,0x1F,0x00],
+  "I":[0x11,0x1F,0x11,0x00,0x00],
+  "J":[0x08,0x10,0x10,0x0F,0x00],
+  "0":[0x0E,0x11,0x11,0x0E,0x00],
+  "1":[0x12,0x1F,0x10,0x00,0x00],
+  "2":[0x1A,0x15,0x15,0x12,0x00],
+  "3":[0x11,0x15,0x15,0x0A,0x00],
+  "4":[0x07,0x04,0x04,0x1F,0x00],
+  "5":[0x17,0x15,0x15,0x09,0x00],
+  "6":[0x0E,0x15,0x15,0x08,0x00],
+  "7":[0x01,0x01,0x1D,0x03,0x00],
+  "8":[0x0A,0x15,0x15,0x0A,0x00],
+  "9":[0x02,0x15,0x15,0x0E,0x00],
+  " ": [0x00,0x00,0x00,0x00,0x00]
+};
 
-const accX = document.getElementById('accX');
-const accY = document.getElementById('accY');
-const accZ = document.getElementById('accZ');
+// 入力画面要素
+const inputScreen = document.getElementById('inputScreen');
+const displayScreen = document.getElementById('displayScreen');
+const textInput = document.getElementById('textInput');
+const runBtn = document.getElementById('runBtn');
 
-function updateDisplay(acc) {
-    accX.textContent = acc.x.toFixed(2);
-    accY.textContent = acc.y.toFixed(2);
-    accZ.textContent = acc.z.toFixed(2);
+let dots = []; // dot div配列
+let colIndex = 0;
+let direction = 1; // 1:右へ, -1:左へ
+let matrix = []; // 2次元ドット配列（列優先）
+let lastAcc = {x:0, y:0, z:0};
+let threshold = 12;
+
+// 入力文字をドットマトリクスに変換
+function textToMatrix(text){
+  const cols = [];
+  for(const c of text.toUpperCase()){
+    const pattern = font5x7[c] || font5x7[" "];
+    for(let i=0;i<pattern.length;i++){
+      const col = [];
+      for(let row=0;row<7;row++){
+        col.push((pattern[i] >> row) & 1);
+      }
+      cols.push(col);
+    }
+    cols.push([0,0,0,0,0,0,0]); // 文字間スペース
+  }
+  return cols;
+}
+
+// dot div作成
+function createDots(numRows, numCols){
+  displayScreen.innerHTML = "";
+  dots = [];
+  for(let r=0;r<numRows;r++){
+    for(let c=0;c<numCols;c++){
+      const d = document.createElement('div');
+      d.classList.add('dot');
+      displayScreen.appendChild(d);
+      dots.push(d);
+    }
+  }
+}
+
+// ドット更新
+function updateDots(){
+  for(let r=0;r<7;r++){
+    for(let c=0;c<matrix.length;c++){
+      const idx = r*matrix.length + c;
+      if(dots[idx]){
+        if(c===colIndex){
+          dots[idx].classList.toggle('on', matrix[c][r]===1);
+        } else {
+          dots[idx].classList.remove('on');
+        }
+      }
+    }
+  }
+  // 次列へ
+  colIndex += direction;
+  if(colIndex >= matrix.length) { direction = -1; colIndex = matrix.length-1;}
+  if(colIndex < 0) { direction = 1; colIndex = 0;}
+}
+
+// 実行ボタン
+runBtn.addEventListener('click', ()=>{
+  const text = textInput.value || "HELLO";
+  matrix = textToMatrix(text);
+  createDots(7, matrix.length);
+  inputScreen.style.display = "none";
+  displayScreen.style.display = "flex";
+});
+
+// 画面タップで戻る
+displayScreen.addEventListener('click', ()=>{
+  displayScreen.style.display = "none";
+  inputScreen.style.display = "flex";
+  colIndex = 0;
+  direction = 1;
+});
+
+// 加速度センサーで列送り
+function handleMotion(event){
+  const acc = event.accelerationIncludingGravity;
+  const diffX = Math.abs(acc.x - lastAcc.x);
+  const diffY = Math.abs(acc.y - lastAcc.y);
+  const diffZ = Math.abs(acc.z - lastAcc.z);
+  const maxDiff = Math.max(diffX, diffY, diffZ);
+  if(maxDiff > threshold){
+    updateDots();
+  }
+  lastAcc = {x:acc.x, y:acc.y, z:acc.z};
 }
 
 // iOS対応
-if (typeof DeviceMotionEvent !== 'undefined' &&
-    typeof DeviceMotionEvent.requestPermission === 'function') {
+if(typeof DeviceMotionEvent !== 'undefined' &&
+   typeof DeviceMotionEvent.requestPermission === 'function'){
     DeviceMotionEvent.requestPermission()
-        .then(response => {
-            if (response === 'granted') {
-                window.addEventListener('devicemotion', handleMotion);
-            } else {
-                alert('加速度センサーの許可が必要です');
-            }
-        })
-        .catch(console.error);
-} else {
-    window.addEventListener('devicemotion', handleMotion);
-}
-
-function handleMotion(event) {
-    const acc = event.accelerationIncludingGravity;
-
-    // 加速度表示更新
-    updateDisplay(acc);
-
-    // 振動判定
-    const diffX = Math.abs(acc.x - lastAcc.x);
-    const diffY = Math.abs(acc.y - lastAcc.y);
-    const diffZ = Math.abs(acc.z - lastAcc.z);
-
-    const maxDiff = Math.max(diffX, diffY, diffZ);
-
-    if (maxDiff > threshold) {
-        if (!isLit) {
-            document.body.classList.add('lit');
-            isLit = true;
+      .then(response=>{
+        if(response==='granted'){
+          window.addEventListener('devicemotion', handleMotion);
+        } else {
+          alert('加速度センサーの許可が必要です');
         }
-    } else {
-        if (isLit) {
-            document.body.classList.remove('lit');
-            isLit = false;
-        }
-    }
-
-    lastAcc = {x: acc.x, y: acc.y, z: acc.z};
+      }).catch(console.error);
+}else{
+  window.addEventListener('devicemotion', handleMotion);
 }
 </script>
 </body>
